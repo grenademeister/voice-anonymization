@@ -13,8 +13,8 @@ class AppConfig:
     frame_length_ms: float = 40.0
     frame_hop_ms: float = 10.0
     channels: int = 1
-    input_device: int | str | None = None
-    output_device: int | str | None = None
+    input_device: int = 1
+    output_device: int = 3
 
     @property
     def frame_length_samples(self) -> int:
