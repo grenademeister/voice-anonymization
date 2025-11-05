@@ -1,0 +1,36 @@
+"""Application configuration models and helpers."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(slots=True)
+class AppConfig:
+    """Configuration parameters that control the anonymizer pipeline."""
+
+    sample_rate: int = 16_000
+    frame_length_ms: float = 40.0
+    frame_hop_ms: float = 10.0
+    channels: int = 1
+    blend_coefficient: float = 0.95
+    input_device: int | str | None = None
+    output_device: int | str | None = None
+    model_path: Path = Path("models/avg_model.json")
+
+    @property
+    def frame_length_samples(self) -> int:
+        """Number of samples contained in a single analysis frame."""
+
+        return int(self.sample_rate * self.frame_length_ms / 1_000.0)
+
+    @property
+    def frame_hop_samples(self) -> int:
+        """Number of samples between consecutive frames."""
+
+        return int(self.sample_rate * self.frame_hop_ms / 1_000.0)
+
+
+DEFAULT_CONFIG = AppConfig()
+"""Default configuration used when no overrides are supplied."""
