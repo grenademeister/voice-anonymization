@@ -2,14 +2,10 @@
 
 from __future__ import annotations
 
-import logging
-
 import numpy as np
 
 from .config import AppConfig
 from .model_loader import AveragedVoiceModel
-
-logger = logging.getLogger(__name__)
 
 
 def _hann_window(length: int) -> np.ndarray:
@@ -60,42 +56,67 @@ class TransformationEngine:
         fft_bins = config.frame_length_samples // 2 + 1
         model.validate(fft_bins)
         self._model = model
+        self._avg_envelope = model.spectral_envelope.astype(np.float32, copy=False)
         self._window = _hann_window(config.frame_length_samples)
+        history_length = max(config.frame_length_samples - config.frame_hop_samples, 0)
+        self._history = np.zeros(history_length, dtype=np.float32)
 
     def process(self, frame: np.ndarray) -> np.ndarray:
         """Process a frame of PCM audio and return the anonymized result."""
 
-        frame_mono = frame[:, 0] if frame.ndim == 2 else frame
-        padded = self._pad_frame(frame_mono)
-        windowed = padded * self._window
+        mono = frame[:, 0] if frame.ndim == 2 else frame
+        hop = self._config.frame_hop_samples
+        mono = np.asarray(mono, dtype=np.float32)
+        if mono.size == 0:
+            return np.zeros((0, self._config.channels), dtype=np.float32)
+        if mono.size > hop:
+            mono = mono[-hop:]
+        elif mono.size < hop:
+            mono = np.pad(mono, (hop - mono.size, 0), mode="constant")
+
+        analysis_frame = self._prepare_analysis_frame(mono)
+
+        if self._config.blend_coefficient <= 1e-6:
+            return self._expand_channels(mono)
+
+        windowed = analysis_frame * self._window
         spectrum = np.fft.rfft(windowed)
         magnitude = np.abs(spectrum)
         phase = np.angle(spectrum)
 
-        avg_env = self._model.spectral_envelope
-        if avg_env.shape[0] != magnitude.shape[0]:
-            avg_env = np.interp(
-                np.linspace(0, avg_env.shape[0] - 1, num=magnitude.shape[0]),
-                np.arange(avg_env.shape[0]),
-                avg_env,
-            )
-        blended_magnitude = (1.0 - self._config.blend_coefficient) * magnitude + self._config.blend_coefficient * avg_env
+        blended_magnitude = (1.0 - self._config.blend_coefficient) * magnitude + self._config.blend_coefficient * self._avg_envelope
         anonymized_spectrum = blended_magnitude * np.exp(1j * phase)
         reconstructed = np.fft.irfft(anonymized_spectrum, n=self._config.frame_length_samples)
 
-        source_f0 = _estimate_f0(reconstructed, self._config.sample_rate)
+        source_f0 = _estimate_f0(analysis_frame, self._config.sample_rate)
         target_f0 = (1.0 - self._config.blend_coefficient) * source_f0 + self._config.blend_coefficient * self._model.average_f0
-        pitch_adjusted = _apply_pitch_shift(reconstructed, source_f0, target_f0)
+        pitch_adjusted = _apply_pitch_shift(reconstructed.astype(np.float32, copy=False), source_f0, target_f0)
 
-        normalized = pitch_adjusted / max(np.max(np.abs(pitch_adjusted)), 1e-6)
-        output = normalized[: self._config.frame_hop_samples]
-        return output.reshape((-1, 1))
+        output = pitch_adjusted[-mono.size :].astype(np.float32, copy=False)
+        return self._expand_channels(output)
 
-    def _pad_frame(self, frame: np.ndarray) -> np.ndarray:
-        length = self._config.frame_length_samples
-        if frame.size >= length:
-            segment = frame[-length:]
+    def _prepare_analysis_frame(self, chunk: np.ndarray) -> np.ndarray:
+        hop = self._config.frame_hop_samples
+        frame_length = self._config.frame_length_samples
+        if chunk.size != hop:
+            raise ValueError(
+                f"Expected chunk of {hop} samples, received {chunk.size}"
+            )
+        if self._history.size == 0:
+            frame = chunk
         else:
-            pad_width = length - frame.size
-            segment = np.pad(frame, (pad_width, 0), mode="constant")
-        return segment.astype(np.float32, copy=False)
+            frame = np.concatenate([self._history, chunk])
+        if frame.size < frame_length:
+            frame = np.pad(frame, (frame_length - frame.size, 0), mode="constant")
+        elif frame.size > frame_length:
+            frame = frame[-frame_length:]
+        if self._history.size:
+            self._history = frame[-self._history.size :].astype(np.float32, copy=False)
+        return frame.astype(np.float32, copy=False)
+
+    def _expand_channels(self, data: np.ndarray) -> np.ndarray:
+        channels = self._config.channels
+        column = data.reshape((-1, 1))
+        if channels == 1:
+            return column
+        return np.repeat(column, channels, axis=1)

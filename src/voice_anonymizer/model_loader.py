@@ -53,8 +53,20 @@ def load_averaged_voice_model(path: Path) -> AveragedVoiceModel:
         raise FileNotFoundError(f"Averaged model not found at {expanded}")
 
     payload = _load_payload(expanded)
-    spectral_envelope = np.asarray(payload.get("spectral_envelope"), dtype=np.float32)
-    average_f0 = float(np.asarray(payload.get("average_f0"), dtype=np.float64))
+
+    if "spectral_envelope" not in payload or "average_f0" not in payload:
+        raise ValueError("Model payload must contain 'spectral_envelope' and 'average_f0' fields")
+
+    spectral_envelope = np.asarray(payload["spectral_envelope"], dtype=np.float32)
+    if spectral_envelope.ndim != 1 or spectral_envelope.size == 0:
+        raise ValueError("Spectral envelope must be a non-empty one-dimensional array")
+
+    average_f0_array = np.asarray(payload["average_f0"], dtype=np.float64)
+    if average_f0_array.size == 0:
+        raise ValueError("Average F0 value missing from model payload")
+    average_f0 = float(average_f0_array.reshape(-1)[0])
+    if not np.isfinite(average_f0) or average_f0 <= 0:
+        raise ValueError("Average F0 must be a positive finite number")
 
     model = AveragedVoiceModel(spectral_envelope=spectral_envelope, average_f0=average_f0)
     return model

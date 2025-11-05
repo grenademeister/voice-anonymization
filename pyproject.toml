@@ -18,9 +18,23 @@ full = [
     "pyinstaller>=5",
     "pyworld>=0.3",
 ]
+tests = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+]
 
 [project.scripts]
 voice-anonymizer = "voice_anonymizer.main:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+]

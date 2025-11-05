@@ -6,8 +6,10 @@ import logging
 import queue
 import threading
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
+
 import sounddevice as sd
 
 from .config import AppConfig
@@ -18,8 +20,9 @@ logger = logging.getLogger(__name__)
 class AudioCapture:
     """Continuously captures frames from the configured microphone device."""
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, sd_module: Any | None = None) -> None:
         self._config = config
+        self._sd = sd_module or sd
         self._queue: "queue.Queue[np.ndarray]" = queue.Queue(maxsize=8)
         self._stream: sd.InputStream | None = None
         self._thread: threading.Thread | None = None
@@ -41,7 +44,7 @@ class AudioCapture:
             except queue.Full:
                 logger.warning("Input queue overflow; dropping audio frame")
 
-        self._stream = sd.InputStream(
+        self._stream = self._sd.InputStream(
             samplerate=self._config.sample_rate,
             blocksize=self._config.frame_hop_samples,
             channels=self._config.channels,
@@ -71,4 +74,5 @@ class AudioCapture:
         if self._stream:
             self._stream.stop()
             self._stream.close()
+            self._stream = None
         self._queue = queue.Queue(maxsize=8)

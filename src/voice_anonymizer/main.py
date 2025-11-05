@@ -7,9 +7,10 @@ import logging
 import signal
 import sys
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, TYPE_CHECKING
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 from .audio_capture import AudioCapture
 from .audio_output import AudioOutput
@@ -73,7 +74,7 @@ def run(argv: list[str] | None = None) -> int:
     output.start()
 
     with _graceful_shutdown() as should_stop:
-        def _process_frame(frame: np.ndarray) -> None:
+        def _process_frame(frame: "np.ndarray") -> None:
             transformed = engine.process(frame)
             output.enqueue([transformed])
             if should_stop():

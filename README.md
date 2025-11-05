@@ -35,27 +35,27 @@ voice-anonymization/
 
 ## Getting Started
 
-1. **Create and activate a virtual environment**
+1. **Synchronize dependencies with [uv](https://docs.astral.sh/uv/)**
 
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/macOS
-   .\.venv\Scripts\activate  # Windows
+   uv sync
    ```
 
-2. **Install the package in editable mode** (with optional extras for development):
+   This command creates a local `.venv/` with the runtime dependencies and development tooling (pytest, etc.).
+
+2. **Run the anonymizer**
 
    ```bash
-   pip install -e .[full]
+   uv run python -m voice_anonymizer.main --input-device <mic> --output-device <sink>
    ```
 
-3. **Run the anonymizer**
+   Use `uv run python -m sounddevice` to list device indices/names. The anonymizer runs until interrupted (Ctrl+C) and maintains a mono, 16 kHz signal path with ~40 ms frames.
+
+3. **Execute the test suite**
 
    ```bash
-   python -m voice_anonymizer.main --input-device <mic> --output-device <sink>
+   uv run pytest
    ```
-
-   Use `python -m sounddevice` to list device indices/names. The anonymizer runs until interrupted (Ctrl+C) and maintains a mono, 16 kHz signal path with ~40 ms frames.
 
 ### Configuration Flags
 
@@ -79,7 +79,7 @@ To generate your own model, compute averaged spectral envelopes and mean F0 stat
 The project ships with a PyInstaller workflow:
 
 ```bash
-python scripts/build_windows_exe.py --dist dist/windows
+uv run python scripts/build_windows_exe.py --dist dist/windows
 ```
 
 This command produces a standalone executable in `dist/windows`, bundling the anonymizer code and `avg_model.json`. For custom packaging, edit `packaging/voice_anonymizer.spec` or adjust the build script flags.
