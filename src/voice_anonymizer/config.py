@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(slots=True)
@@ -46,6 +46,44 @@ class AppConfig:
         """Pitch scaling factor derived from semitone shift."""
 
         return 2.0 ** (self.pitch_shift_semitones / 12.0)
+
+    def with_preset(self, preset: str) -> "AppConfig":
+        """Return a copy configured for a named anonymization preset."""
+
+        try:
+            overrides = ANONYMIZATION_PRESETS[preset]
+        except KeyError as exc:
+            raise ValueError(f"Unknown anonymization preset: {preset}") from exc
+        return replace(self, **overrides)
+
+
+ANONYMIZATION_PRESETS: dict[str, dict[str, float]] = {
+    "off": {
+        "pitch_shift_semitones": 0.0,
+        "formant_shift_ratio": 1.0,
+        "amplitude_scale": 1.0,
+        "noise_level": 0.0,
+    },
+    "light": {
+        "pitch_shift_semitones": -2.5,
+        "formant_shift_ratio": 1.08,
+        "amplitude_scale": 1.0,
+        "noise_level": 0.003,
+    },
+    "medium": {
+        "pitch_shift_semitones": -5.0,
+        "formant_shift_ratio": 1.18,
+        "amplitude_scale": 1.05,
+        "noise_level": 0.007,
+    },
+    "strong": {
+        "pitch_shift_semitones": -8.0,
+        "formant_shift_ratio": 1.3,
+        "amplitude_scale": 1.1,
+        "noise_level": 0.015,
+    },
+}
+DEFAULT_PRESET_NAME = "medium"
 
 
 DEFAULT_CONFIG = AppConfig()

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from .main import run
+try:  # Prefer relative import when executed as a package module.
+    from .main import run
+except ImportError:  # Fallback for frozen/standalone environments.
+    from voice_anonymizer.main import run  # type: ignore[no-redef]
 
 
 def main() -> int:

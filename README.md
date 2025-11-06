@@ -5,7 +5,7 @@ Realtime voice anonymization pipeline that reshapes pitch, spectral envelope, an
 ## Features
 - WORLD-based analysis/resynthesis with configurable pitch shifting and formant warping
 - Optional amplitude scaling and noise injection for additional masking
-- Interactive device picker when input/output devices are not supplied on the command line
+- Interactive device picker (and anonymization intensity selector) when input/output devices are not supplied on the command line
 - `--list-devices` helper to inspect the current audio topology
 - PyInstaller spec for producing a standalone Windows executable
 
@@ -23,6 +23,7 @@ pip install -e .
 ### Key Options
 - `--pitch-shift <semitones>` – scale F0 (`-4.0` by default)
 - `--formant-ratio <ratio>` – warp spectral envelope (`1.15` raises formants)
+- `--preset <name>` – override anonymization settings via `off`, `light`, `medium`, or `strong`
 - `--world-block <ms>` – WORLD processing window (latency control)
 - `--amplitude-scale <gain>` – post-resynthesis gain
 - `--noise-level <stddev>` – Gaussian noise injected after resynthesis
@@ -32,6 +33,7 @@ Combine options to match the level of anonymization you need, e.g.:
 ```bash
 python -m voice_anonymizer --pitch-shift -6 --formant-ratio 1.25 --noise-level 0.01
 ```
+When running without explicit devices/preset, the CLI prompts you to choose both, with `medium` anonymization selected by default.
 
 ## Building a Standalone EXE
 PyInstaller is configured via `voice_anonymizer.spec`. Generate a single-file executable with:

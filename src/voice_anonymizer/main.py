@@ -17,7 +17,12 @@ import sounddevice as sd
 
 from .audio_capture import AudioCapture
 from .audio_output import AudioOutput
-from .config import AppConfig, DEFAULT_CONFIG
+from .config import (
+    ANONYMIZATION_PRESETS,
+    DEFAULT_CONFIG,
+    DEFAULT_PRESET_NAME,
+    AppConfig,
+)
 from .transform import FrameTransformer
 
 logger = logging.getLogger(__name__)
@@ -92,6 +97,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_CONFIG.world_block_ms,
         help="WORLD processing block size in milliseconds (controls latency)",
+    )
+    parser.add_argument(
+        "--preset",
+        choices=sorted(ANONYMIZATION_PRESETS),
+        help=(
+            "Anonymization preset that overrides pitch/formant/noise defaults. "
+            "Options: " + ", ".join(sorted(ANONYMIZATION_PRESETS))
+        ),
     )
     parser.add_argument(
         "--min-f0",
@@ -208,6 +221,47 @@ def _prompt_for_device(kind: str) -> int | str | None:
         print("No device matched that input; try again.")
 
 
+def _prompt_for_preset() -> str:
+    names = list(ANONYMIZATION_PRESETS.keys())
+    default_index = names.index(DEFAULT_PRESET_NAME)
+
+    print("Anonymization presets:")
+    print("---------------------")
+    for idx, name in enumerate(names, 1):
+        params = ANONYMIZATION_PRESETS[name]
+        print(
+            f"{idx:>2}) {name:<6} | pitch {params['pitch_shift_semitones']:>5.1f} st | "
+            f"formant {params['formant_shift_ratio']:.2f}x | noise {params['noise_level']:.3f}"
+        )
+    print()
+
+    while True:
+        prompt = (
+            f"Select anonymization preset [1-{len(names)} or name] "
+            f"(default {default_index + 1} - {names[default_index]}): "
+        )
+        try:
+            choice = input(prompt).strip().lower()
+        except EOFError:
+            logger.info("No terminal input available; using default preset %s", names[default_index])
+            return names[default_index]
+
+        if not choice:
+            return names[default_index]
+
+        if choice.isdigit():
+            value = int(choice)
+            if 1 <= value <= len(names):
+                return names[value - 1]
+            print("Invalid number; please choose a listed option.")
+            continue
+
+        if choice in names:
+            return choice
+
+        print("Unknown preset. Enter the preset name or its number.")
+
+
 def _prepare_config(namespace: argparse.Namespace) -> AppConfig:
     config = AppConfig(
         input_device=namespace.input_device,
@@ -224,11 +278,19 @@ def _prepare_config(namespace: argparse.Namespace) -> AppConfig:
         max_f0=namespace.max_f0,
     )
 
+    preset_name = namespace.preset
+
     if sys.stdin.isatty():
         if config.input_device is None:
             config.input_device = _prompt_for_device("input")
         if config.output_device is None:
             config.output_device = _prompt_for_device("output")
+        if preset_name is None:
+            preset_name = _prompt_for_preset()
+
+    if preset_name:
+        logger.info("Applying anonymization preset: %s", preset_name)
+        config = config.with_preset(preset_name)
 
     return config
 
