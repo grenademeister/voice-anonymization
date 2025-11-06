@@ -22,6 +22,25 @@ def _sine_chunk(config: AppConfig, frequency: float = 220.0) -> np.ndarray:
     return chunk
 
 
+def _sine_stream(config: AppConfig, frequency: float, frames: int) -> list[np.ndarray]:
+    hop = config.frame_hop_samples
+    sample_rate = config.sample_rate
+    offset = 0
+    output: list[np.ndarray] = []
+    for _ in range(frames):
+        t = (np.arange(hop) + offset) / sample_rate
+        output.append(np.sin(2.0 * np.pi * frequency * t).astype(np.float32))
+        offset += hop
+    return output
+
+
+def _dominant_frequency(samples: np.ndarray, sample_rate: int) -> float:
+    window = np.hanning(samples.size)
+    spectrum = np.fft.rfft(samples * window)
+    freqs = np.fft.rfftfreq(samples.size, d=1.0 / sample_rate)
+    return float(freqs[int(np.argmax(np.abs(spectrum)))])
+
+
 def test_identity_preserved_when_blend_is_zero():
     config, engine = _make_engine(blend=0.0)
     chunk = _sine_chunk(config)
@@ -50,3 +69,24 @@ def test_multichannel_output_is_broadcast():
     processed = engine.process(chunk)
     assert processed.shape == (config.frame_hop_samples, 2)
     np.testing.assert_allclose(processed[:, 0], processed[:, 1])
+
+
+def test_pitch_shifts_toward_model_average():
+    config, engine = _make_engine(blend=1.0)
+    frames = _sine_stream(config, frequency=120.0, frames=12)
+    outputs = [engine.process(frame.reshape((-1, 1)))[:, 0] for frame in frames]
+    tail = np.concatenate(outputs[-4:])
+    dominant = _dominant_frequency(tail, config.sample_rate)
+    assert dominant > 140.0
+    assert dominant == pytest.approx(engine._model.average_f0, abs=40.0)
+
+
+def test_output_rms_tracks_model_target():
+    config, engine = _make_engine(blend=1.0)
+    frames = _sine_stream(config, frequency=150.0, frames=12)
+    outputs = [engine.process(frame.reshape((-1, 1)))[:, 0] for frame in frames]
+    tail = np.concatenate(outputs[-4:])
+    rms = float(np.sqrt(np.mean(np.square(tail, dtype=np.float64))))
+    envelope = engine._model.spectral_envelope.astype(np.float64, copy=False)
+    target_rms = float(np.sqrt(np.mean(np.square(envelope))))
+    assert rms == pytest.approx(target_rms, rel=0.15, abs=0.05)
