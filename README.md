@@ -1,82 +1,108 @@
-# Real-Time Voice Anonymization Engine
+# Audio Passthrough (Base Branch)
 
-This repository contains a local-first voice anonymizer that captures audio from a microphone, transforms it to obscure speaker identity, and plays the anonymized stream through a selected output device. The processing pipeline performs frame-based spectral envelope blending and pitch normalization using precomputed averaged voice statistics.
+This is the **base** branch containing a minimal audio passthrough implementation.
 
-## Features
+> **Note:** For the full voice anonymization engine, switch to the `main` branch.
 
-- **Real-time capture and playback** via [SoundDevice](https://python-sounddevice.readthedocs.io/)
-- **Spectral envelope normalization** blending the incoming magnitude spectrum with an averaged reference
-- **Pitch normalization** toward the averaged fundamental frequency using lightweight resampling
-- **Configurable anonymization strength** through the blend coefficient
-- **Packaged averaged model** (`models/avg_model.json`) containing spectral and pitch statistics
-- **Packaging workflow** for creating a standalone Windows executable with PyInstaller
+## What This Branch Does
 
-## Project Layout
+This branch implements a simple audio pipeline:
+1. **Captures audio** from your microphone
+2. **Applies identity transform** (passthrough - no modification)
+3. **Outputs the audio** directly to your speaker
 
-```
-voice-anonymization/
-├── models/
-│   └── avg_model.json
-├── packaging/
-│   └── voice_anonymizer.spec
-├── scripts/
-│   └── build_windows_exe.py
-├── src/
-│   └── voice_anonymizer/
-│       ├── __init__.py
-│       ├── audio_capture.py
-│       ├── audio_output.py
-│       ├── config.py
-│       ├── main.py
-│       ├── model_loader.py
-│       └── transformation_engine.py
-└── pyproject.toml
-```
+## Purpose
+
+This branch serves as:
+- A baseline for testing audio I/O setup
+- A debugging tool for audio device configuration
+- A starting point for developing custom audio transformations
 
 ## Getting Started
 
-1. **Synchronize dependencies with [uv](https://docs.astral.sh/uv/)**
+### 1. Install Dependencies
 
-   ```bash
-   uv sync
-   ```
+```bash
+pip install -e .
+```
 
-   This command creates a local `.venv/` with the runtime dependencies and development tooling (pytest, etc.).
+Or with uv:
 
-2. **Run the anonymizer**
+```bash
+uv sync
+```
 
-   ```bash
-   uv run python -m voice_anonymizer.main --input-device <mic> --output-device <sink>
-   ```
+### 2. Run the Passthrough
 
-   Use `uv run python -m sounddevice` to list device indices/names. The anonymizer runs until interrupted (Ctrl+C) and maintains a mono, 16 kHz signal path with ~40 ms frames.
+```bash
+python -m voice_anonymizer.main
+```
 
-3. **Execute the test suite**
+Or with uv:
 
-   ```bash
-   uv run pytest
-   ```
+```bash
+uv run python -m voice_anonymizer.main
+```
 
-### Configuration Flags
+### 3. List Available Audio Devices
 
-- `--model`: Path to an averaged model JSON/NPZ/PKL file
-- `--blend`: Blend coefficient (0.0 retains original, 1.0 fully averaged)
-- `--sample-rate`: Processing sample rate (default 16000)
-- `--frame-length`: Frame analysis window in milliseconds (default 40)
-- `--frame-hop`: Frame hop in milliseconds (default 10)
+```bash
+python -m sounddevice
+```
 
-## Averaged Model Format
+### 4. Run with Specific Devices
 
-The bundled `models/avg_model.json` stores two fields:
+```bash
+python -m voice_anonymizer.main --input-device 0 --output-device 1
+```
 
-- `spectral_envelope`: Array of length `frame_length_samples // 2 + 1` representing the averaged magnitude spectrum
-- `average_f0`: Scalar value with the averaged fundamental frequency in Hz
+## Command-Line Options
 
-To generate your own model, compute averaged spectral envelopes and mean F0 statistics from multiple speakers and export them as JSON (or NPZ/PKL). Update the `--model` flag to point to the new file.
+- `--input-device <id>` - Microphone device index/name
+- `--output-device <id>` - Speaker device index/name
+- `--sample-rate <rate>` - Sample rate (default: 16000)
+- `--frame-length <ms>` - Frame length in milliseconds (default: 40.0)
+- `--frame-hop <ms>` - Frame hop in milliseconds (default: 10.0)
+- `--debug` - Enable debug logging
 
-## Packaging for Windows
+## Project Structure
 
-The project ships with a PyInstaller workflow:
+```
+voice-anonymization/ (base branch)
+├── src/
+│   └── voice_anonymizer/
+│       ├── __init__.py          # Package exports
+│       ├── audio_capture.py     # Microphone input
+│       ├── audio_output.py      # Speaker output
+│       ├── config.py            # Configuration
+│       └── main.py              # Main entry point
+├── pyproject.toml               # Project metadata
+├── BASE_README.md               # Detailed base branch docs
+└── README.md                    # This file
+```
+
+## Architecture
+
+```
+Microphone → AudioCapture → [Identity Transform] → AudioOutput → Speaker
+                                      ↓
+                              (No modification)
+```
+
+## For Full Voice Anonymization
+
+Switch to the `main` branch:
+
+```bash
+git checkout main
+```
+
+The main branch includes:
+- Voice transformation engine
+- Model loading
+- Spectral envelope blending
+- Pitch normalization
+- Visualization tools
 
 ```bash
 uv run python scripts/build_windows_exe.py --dist dist/windows
