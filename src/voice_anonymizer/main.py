@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from .audio_capture import AudioCapture
 from .audio_output import AudioOutput
 from .config import AppConfig, DEFAULT_CONFIG
+from .transform import FrameTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,36 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         help="Frame hop (ms)",
     )
     parser.add_argument(
+        "--formant-shift",
+        type=float,
+        default=DEFAULT_CONFIG.formant_shift_ratio,
+        help="WORLD spectral envelope scaling ratio",
+    )
+    parser.add_argument(
+        "--pitch-shift",
+        type=float,
+        default=DEFAULT_CONFIG.pitch_shift_semitones,
+        help="WORLD pitch shift (semitones)",
+    )
+    parser.add_argument(
+        "--spectral-exp",
+        type=float,
+        default=DEFAULT_CONFIG.spectral_envelope_exponent,
+        help="WORLD spectral envelope exponent",
+    )
+    parser.add_argument(
+        "--world-window",
+        type=float,
+        default=DEFAULT_CONFIG.world_analysis_window_ms,
+        help="WORLD analysis window (ms) controlling smoothness vs latency",
+    )
+    parser.add_argument(
+        "--world-mix",
+        type=float,
+        default=DEFAULT_CONFIG.world_wet_mix,
+        help="WORLD wet mix ratio (1.0 = fully processed, 0.0 = dry)",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging",
@@ -72,6 +103,11 @@ def parse_args(argv: list[str] | None = None) -> AppConfig:
         sample_rate=args.sample_rate,
         frame_length_ms=args.frame_length,
         frame_hop_ms=args.frame_hop,
+        formant_shift_ratio=args.formant_shift,
+        pitch_shift_semitones=args.pitch_shift,
+        spectral_envelope_exponent=args.spectral_exp,
+        world_analysis_window_ms=args.world_window,
+        world_wet_mix=args.world_mix,
     )
 
 
@@ -128,6 +164,36 @@ def run(argv: list[str] | None = None) -> int:
         help="Frame hop (ms)",
     )
     parser.add_argument(
+        "--formant-shift",
+        type=float,
+        default=DEFAULT_CONFIG.formant_shift_ratio,
+        help="WORLD spectral envelope scaling ratio",
+    )
+    parser.add_argument(
+        "--pitch-shift",
+        type=float,
+        default=DEFAULT_CONFIG.pitch_shift_semitones,
+        help="WORLD pitch shift (semitones)",
+    )
+    parser.add_argument(
+        "--spectral-exp",
+        type=float,
+        default=DEFAULT_CONFIG.spectral_envelope_exponent,
+        help="WORLD spectral envelope exponent",
+    )
+    parser.add_argument(
+        "--world-window",
+        type=float,
+        default=DEFAULT_CONFIG.world_analysis_window_ms,
+        help="WORLD analysis window (ms) controlling smoothness vs latency",
+    )
+    parser.add_argument(
+        "--world-mix",
+        type=float,
+        default=DEFAULT_CONFIG.world_wet_mix,
+        help="WORLD wet mix ratio (1.0 = fully processed, 0.0 = dry)",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging",
@@ -144,6 +210,11 @@ def run(argv: list[str] | None = None) -> int:
         sample_rate=args_namespace.sample_rate,
         frame_length_ms=args_namespace.frame_length,
         frame_hop_ms=args_namespace.frame_hop,
+        formant_shift_ratio=args_namespace.formant_shift,
+        pitch_shift_semitones=args_namespace.pitch_shift,
+        spectral_envelope_exponent=args_namespace.spectral_exp,
+        world_analysis_window_ms=args_namespace.world_window,
+        world_wet_mix=args_namespace.world_mix,
     )
 
     logger.info("Starting audio passthrough with config: %s", config)
@@ -151,22 +222,23 @@ def run(argv: list[str] | None = None) -> int:
     # Initialize audio I/O
     capture = AudioCapture(config)
     output = AudioOutput(config)
+    transformer = FrameTransformer(config)
 
     output.start()
 
     with _graceful_shutdown() as should_stop:
 
         def _process_frame(frame: "np.ndarray") -> None:
-            """Identity transform - just pass the audio through unchanged."""
-            # No transformation - just pass through
-            output.enqueue([frame])
+            """Apply WORLD transform to the captured frame and stream it out."""
+            processed = transformer(frame)
+            output.enqueue([processed])
             if should_stop():
                 capture.stop()
 
         capture.start(_process_frame)
 
         logger.info("Audio passthrough running. Press Ctrl+C to exit.")
-        logger.info("Input will be directly routed to output (identity transform).")
+        logger.info("Input audio will be WORLD-processed before playback.")
         while not should_stop():
             time.sleep(0.1)
 

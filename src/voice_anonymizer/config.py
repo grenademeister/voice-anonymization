@@ -15,6 +15,11 @@ class AppConfig:
     channels: int = 1
     input_device: int = 1
     output_device: int = 3
+    formant_shift_ratio: float = 1.0
+    pitch_shift_semitones: float = 0.01
+    spectral_envelope_exponent: float = 1.0
+    world_analysis_window_ms: float = 120.0
+    world_wet_mix: float = 0.7
 
     @property
     def frame_length_samples(self) -> int:
