@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 
 @dataclass(slots=True)
 class AppConfig:
-    """Configuration parameters that control the anonymizer pipeline."""
+    """Configuration parameters that control the audio passthrough pipeline."""
 
     sample_rate: int = 16_000
     frame_length_ms: float = 40.0
     frame_hop_ms: float = 10.0
     channels: int = 1
-    blend_coefficient: float = 0.95
     input_device: int | str | None = None
     output_device: int | str | None = None
-    model_path: Path = Path("models/avg_model.json")
 
     @property
     def frame_length_samples(self) -> int:

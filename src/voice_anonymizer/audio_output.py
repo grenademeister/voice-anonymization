@@ -33,12 +33,30 @@ class AudioOutput:
 
         self._running = True
 
+        output_frame_count = 0
+        underrun_count = 0
+
         def _callback(outdata: np.ndarray, frames: int, time, status: sd.CallbackFlags) -> None:  # type: ignore[override]
+            nonlocal output_frame_count, underrun_count
+            output_frame_count += 1
             if status:
                 logger.warning("Output stream status: %s", status)
             try:
                 chunk = self._queue.get_nowait()
+                if output_frame_count % 100 == 0:
+                    logger.debug(
+                        "Output frame %d: shape=%s, rms=%.4f",
+                        output_frame_count,
+                        chunk.shape,
+                        np.sqrt(np.mean(chunk**2)),
+                    )
             except queue.Empty:
+                underrun_count += 1
+                if underrun_count % 50 == 0:
+                    logger.debug(
+                        "Output queue underrun (count=%d); filling with silence",
+                        underrun_count,
+                    )
                 outdata.fill(0)
                 return
             if chunk.shape[0] < frames:
@@ -54,6 +72,13 @@ class AudioOutput:
             dtype="float32",
             callback=_callback,
             device=self._config.output_device,
+        )
+        logger.info(
+            "Starting output stream: device=%s, sample_rate=%d, channels=%d, blocksize=%d",
+            self._config.output_device,
+            self._config.sample_rate,
+            self._config.channels,
+            self._config.frame_hop_samples,
         )
         self._stream.start()
 
@@ -71,14 +96,19 @@ class AudioOutput:
             try:
                 self._queue.put_nowait(array)
             except queue.Full:
-                logger.warning("Output queue overflow; dropping audio frame")
+                logger.warning(
+                    "Output queue overflow; dropping audio frame (queue size=%d)",
+                    self._queue.qsize(),
+                )
 
     def stop(self) -> None:
         """Stop playback and release resources."""
 
+        logger.info("Stopping audio output")
         self._running = False
         if self._stream:
             self._stream.stop()
             self._stream.close()
             self._stream = None
         self._queue = queue.Queue(maxsize=8)
+        logger.info("Audio output stopped")

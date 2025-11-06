@@ -36,9 +36,20 @@ class AudioCapture:
 
         self._running.set()
 
+        frame_count = 0
+
         def _callback(indata: np.ndarray, frames: int, time, status: sd.CallbackFlags) -> None:  # type: ignore[override]
+            nonlocal frame_count
+            frame_count += 1
             if status:
                 logger.warning("Input stream status: %s", status)
+            if frame_count % 100 == 0:
+                logger.debug(
+                    "Captured frame %d: shape=%s, rms=%.4f",
+                    frame_count,
+                    indata.shape,
+                    np.sqrt(np.mean(indata**2)),
+                )
             try:
                 self._queue.put_nowait(indata.copy())
             except queue.Full:
@@ -52,22 +63,41 @@ class AudioCapture:
             callback=_callback,
             device=self._config.input_device,
         )
+        logger.info(
+            "Starting input stream: device=%s, sample_rate=%d, channels=%d, blocksize=%d",
+            self._config.input_device,
+            self._config.sample_rate,
+            self._config.channels,
+            self._config.frame_hop_samples,
+        )
         self._stream.start()
 
         def _worker() -> None:
+            processed_count = 0
             while self._running.is_set():
                 try:
                     frame = self._queue.get(timeout=0.1)
                 except queue.Empty:
                     continue
+                processed_count += 1
+                if processed_count % 100 == 0:
+                    logger.debug(
+                        "Processing captured frame %d: shape=%s",
+                        processed_count,
+                        frame.shape,
+                    )
                 on_frame(frame)
 
-        self._thread = threading.Thread(target=_worker, name="AudioCaptureThread", daemon=True)
+        self._thread = threading.Thread(
+            target=_worker, name="AudioCaptureThread", daemon=True
+        )
         self._thread.start()
+        logger.info("Audio capture worker thread started")
 
     def stop(self) -> None:
         """Stop capturing audio and clean up resources."""
 
+        logger.info("Stopping audio capture")
         self._running.clear()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.0)
@@ -76,3 +106,4 @@ class AudioCapture:
             self._stream.close()
             self._stream = None
         self._queue = queue.Queue(maxsize=8)
+        logger.info("Audio capture stopped")
